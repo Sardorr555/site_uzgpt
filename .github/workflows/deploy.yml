@@ -1,23 +1,22 @@
-name: Deploy Website
+name: Deploy to Namecheap
 
 on:
   push:
     branches:
-      - main  # Или твоя основная ветка
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Upload via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4  # Указываем конкретную версию
+      - name: FTP Deploy
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
           server: ${{ secrets.FTP_HOST }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./  # Указываем исходную папку проекта
-          server-dir: /public_html/  # Папка на сервере
+          local-dir: ./  # Директория вашего проекта
+          server-dir: /public_html/  # Корневая директория на хостинге

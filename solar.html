@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Симуляция Солнечной системы</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+        }
+        
+        #canvas {
+            display: block;
+        }
+        
+        #info-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            max-width: 300px;
+        }
+        
+        #planet-info {
+            margin-top: 10px;
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        button {
+            margin: 5px;
+            padding: 5px 10px;
+            background: #333;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background: #555;
+        }
+        
+        #speed-control {
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    
+    <div id="info-panel">
+        <h2>Солнечная система</h2>
+        <div>Скорость симуляции: <span id="speed-value">1x</span></div>
+        <div>Наклоните/проведите для вращения камеры</div>
+        <div>Колесико мыши для зума</div>
+        <div id="planet-info">Наведите курсор на планету для информации</div>
+    </div>
+    
+    <div id="controls">
+        <button id="toggle-play">Пауза</button>
+        <button id="toggle-orbits">Скрыть орбиты</button>
+        <button id="toggle-labels">Скрыть названия</button>
+        <div id="speed-control">
+            Скорость: <input type="range" id="speed-slider" min="0.1" max="5" step="0.1" value="1">
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Размер холста
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        // Центр солнечной системы
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        
+        // Масштаб (астрономические единицы в пикселях)
+        let scale = Math.min(canvas.width, canvas.height) / 70;
+        
+        // Переменные для управления камерой
+        let cameraRotationX = 0;
+        let cameraRotationY = 0;
+        let isDragging = false;
+        let lastMouseX, lastMouseY;
+        
+        // Скорость симуляции
+        let simulationSpeed = 1;
+        let isPaused = false;
+        
+        // Переключатели отображения
+        let showOrbits = true;
+        let showLabels = true;
+        
+        // Текущее время (в днях от начала симуляции)
+        let currentDay = 0;
+        
+        // Данные о планетах (реалистичные параметры)
+        const planets = [
+            {
+                name: "Меркурий",
+                radius: 0.383, // Относительно Земли (радиус Земли = 1)
+                distanceFromSun: 0.387, // В АЕ
+                color: "#A9A9A9",
+                orbitalPeriod: 87.97, // в днях
+                orbitalInclination: 7.0, // наклон орбиты в градусах
+                rotationPeriod: 58.6, // в днях
+                info: "Ближайшая к Солнцу планета с экстремальными перепадами температур."
+            },
+            {
+                name: "Венера",
+                radius: 0.95,
+                distanceFromSun: 0.723,
+                color: "#E6CB91",
+                orbitalPeriod: 224.7,
+                orbitalInclination: 3.4,
+                rotationPeriod: -243, // Отрицательное значение означает вращение в обратную сторону
+                info: "Вторая от Солнца планета с плотной атмосферой, самая горячая в Солнечной системе."
+            },
+            {
+                name: "Земля",
+                radius: 1,
+                distanceFromSun: 1,
+                color: "#6B93D6",
+                orbitalPeriod: 365.25,
+                orbitalInclination: 0, // Относительно плоскости эклиптики (которая определяется орбитой Земли)
+                rotationPeriod: 1,
+                info: "Наша планета, единственная с известной жизнью в Солнечной системе."
+            },
+            {
+                name: "Марс",
+                radius: 0.53,
+                distanceFromSun: 1.524,
+                color: "#C1440E",
+                orbitalPeriod: 686.98,
+                orbitalInclination: 1.9,
+                rotationPeriod: 1.03,
+                info: "Четвертая планета, известная как 'красная планета' из-за оксидов железа на поверхности."
+            },
+            {
+                name: "Юпитер",
+                radius: 11.2,
+                distanceFromSun: 5.203,
+                color: "#D8CA9D",
+                orbitalPeriod: 4332.59,
+                orbitalInclination: 1.3,
+                rotationPeriod: 0.41,
+                info: "Самая большая планета Солнечной системы, газовый гигант."
+            },
+            {
+                name: "Сатурн",
+                radius: 9.45,
+                distanceFromSun: 9.537,
+                color: "#E3E0B8",
+                orbitalPeriod: 10759.22,
+                orbitalInclination: 2.5,
+                rotationPeriod: 0.45,
+                hasRings: true,
+                info: "Шестая планета, известная своими впечатляющими кольцами."
+            },
+            {
+                name: "Уран",
+                radius: 4.01,
+                distanceFromSun: 19.191,
+                color: "#CAECEB",
+                orbitalPeriod: 30688.5,
+                orbitalInclination: 0.8,
+                rotationPeriod: -0.72, // Вращается "лёжа на боку"
+                axialTilt: 98,
+                info: "Седьмая планета, имеет экстремальный наклон оси вращения."
+            },
+            {
+                name: "Нептун",
+                radius: 3.88,
+                distanceFromSun: 30.07,
+                color: "#5B5DDF",
+                orbitalPeriod: 60182,
+                orbitalInclination: 1.8,
+                rotationPeriod: 0.67,
+                info: "Восьмая и самая дальняя планета, газовый гигант с сильными ветрами."
+            }
+        ];
+        
+        // Функция для отрисовки планет
+        function drawPlanets() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Отрисовка фона со звездами
+            drawStars();
+            
+            // Отрисовка Солнца
+            ctx.beginPath();
+            ctx.fillStyle = "#FDB813";
+            const sunRadius = 3 * scale; // Солнце намного больше, но масштабируем для удобства отображения
+            ctx.arc(centerX, centerY, sunRadius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Создаем легкое свечение вокруг Солнца
+            const gradient = ctx.createRadialGradient(
+                centerX, centerY, sunRadius,
+                centerX, centerY, sunRadius * 1.5
+            );
+            gradient.addColorStop(0, 'rgba(253, 184, 19, 0.4)');
+            gradient.addColorStop(1, 'rgba(253, 184, 19, 0)');
+            
+            ctx.beginPath();
+            ctx.fillStyle = gradient;
+            ctx.arc(centerX, centerY, sunRadius * 1.5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            if (showLabels) {
+                ctx.fillStyle = "white";
+                ctx.font = "bold 14px Arial";
+                ctx.fillText("Солнце", centerX - 20, centerY - sunRadius - 10);
+            }
+            
+            // Отрисовка орбит и планет
+            for (const planet of planets) {
+                // Расчет положения планеты на орбите
+                const angle = (currentDay / planet.orbitalPeriod) * Math.PI * 2;
+                
+                // Учитываем 3D-проекцию с наклоном орбиты и вращением камеры
+                const inclination = planet.orbitalInclination * Math.PI / 180;
+                const rotationX = cameraRotationX * Math.PI / 180;
+                const rotationY = cameraRotationY * Math.PI / 180;
+                
+                const distance = planet.distanceFromSun * scale * 10;
+                
+                // Базовые координаты в плоскости орбиты
+                let x = Math.cos(angle) * distance;
+                let y = Math.sin(angle) * distance * Math.cos(inclination);
+                let z = Math.sin(angle) * distance * Math.sin(inclination);
+                
+                // Применяем вращение камеры
+                const tempX = x;
+                const tempY = y * Math.cos(rotationX) - z * Math.sin(rotationX);
+                const tempZ = y * Math.sin(rotationX) + z * Math.cos(rotationX);
+                
+                x = tempX * Math.cos(rotationY) + tempZ * Math.sin(rotationY);
+                y = tempY;
+                z = -tempX * Math.sin(rotationY) + tempZ * Math.cos(rotationY);
+                
+                // Координаты с учетом центра экрана
+                const planetX = centerX + x;
+                const planetY = centerY + y;
+                
+                // Отрисовка орбиты (эллипс с учетом проекции)
+                if (showOrbits) {
+                    ctx.beginPath();
+                    ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+                    ctx.lineWidth = 1;
+                    
+                    // Рисуем эллипс с учетом проекции
+                    ctx.save();
+                    ctx.translate(centerX, centerY);
+                    ctx.rotate(rotationY);
+                    ctx.scale(1, Math.cos(rotationX));
+                    ctx.beginPath();
+                    ctx.arc(0, 0, distance, 0, Math.PI * 2);
+                    ctx.restore();
+                    ctx.stroke();
+                }
+                
+                // Размер планеты (масштабируем небольшие планеты для видимости)
+                const planetRadius = Math.max(planet.radius * scale * 0.7, 2);
+                
+                // Масштаб размера зависит от z-координаты для эффекта глубины
+                const sizeScale = 1 + z / (distance * 5);
+                const adjustedRadius = planetRadius * sizeScale;
+                
+                // Отрисовка планеты
+                ctx.beginPath();
+                ctx.fillStyle = planet.color;
+                ctx.arc(planetX, planetY, adjustedRadius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Отрисовка колец Сатурна
+                if (planet.hasRings) {
+                    ctx.beginPath();
+                    ctx.strokeStyle = "#CBB67C";
+                    ctx.lineWidth = 2;
+                    
+                    // Трансформация для проекции колец
+                    ctx.save();
+                    ctx.translate(planetX, planetY);
+                    ctx.rotate(rotationY);
+                    ctx.scale(1, Math.cos(rotationX + 0.2));
+                    ctx.beginPath();
+                    ctx.arc(0, 0, adjustedRadius * 1.8, 0, Math.PI * 2);
+                    ctx.restore();
+                    ctx.stroke();
+                }
+                
+                // Добавление текстовых меток
+                if (showLabels) {
+                    ctx.fillStyle = "white";
+                    ctx.font = "12px Arial";
+                    ctx.fillText(planet.name, planetX - 20, planetY - adjustedRadius - 5);
+                }
+                
+                // Сохраняем координаты для обработки наведения мыши
+                planet.screenX = planetX;
+                planet.screenY = planetY;
+                planet.screenRadius = adjustedRadius;
+            }
+        }
+        
+        // Функция для генерации и отрисовки звезд
+        function drawStars() {
+            ctx.fillStyle = "white";
+            
+            // Используем сохраненные координаты звезд или создаем новые
+            if (!window.stars) {
+                window.stars = [];
+                for (let i = 0; i < 1000; i++) {
+                    window.stars.push({
+                        x: Math.random() * canvas.width,
+                        y: Math.random() * canvas.height,
+                        size: Math.random() * 1.5
+                    });
+                }
+            }
+            
+            // Отрисовка звезд
+            for (const star of window.stars) {
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        // Функция анимации
+        function animate() {
+            if (!isPaused) {
+                currentDay += simulationSpeed;
+            }
+            
+            drawPlanets();
+            requestAnimationFrame(animate);
+        }
+        
+        // Инициализация и запуск анимации
+        animate();
+        
+        // Обработчики событий для управления
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+        });
+        
+        canvas.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            // Вращение камеры при перетаскивании
+            if (isDragging) {
+                const deltaX = e.clientX - lastMouseX;
+                const deltaY = e.clientY - lastMouseY;
+                
+                cameraRotationY += deltaX * 0.5;
+                cameraRotationX += deltaY * 0.5;
+                
+                // Ограничение вращения по вертикали
+                cameraRotationX = Math.max(-85, Math.min(85, cameraRotationX));
+                
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+            }
+            
+            // Информация о планете при наведении
+            const planetInfo = document.getElementById('planet-info');
+            let hoveredPlanet = null;
+            
+            for (const planet of planets) {
+                if (planet.screenX && planet.screenY) {
+                    const distance = Math.sqrt(
+                        Math.pow(e.clientX - planet.screenX, 2) +
+                        Math.pow(e.clientY - planet.screenY, 2)
+                    );
+                    
+                    if (distance <= planet.screenRadius) {
+                        hoveredPlanet = planet;
+                        break;
+                    }
+                }
+            }
+            
+            if (hoveredPlanet) {
+                planetInfo.innerHTML = `
+                    <strong>${hoveredPlanet.name}</strong><br>
+                    Расстояние от Солнца: ${hoveredPlanet.distanceFromSun.toFixed(2)} а.е.<br>
+                    Орбитальный период: ${hoveredPlanet.orbitalPeriod.toFixed(1)} дней<br>
+                    ${hoveredPlanet.info}
+                `;
+            } else {
+                planetInfo.innerHTML = 'Наведите курсор на планету для информации';
+            }
+        });
+        
+        // Масштабирование при прокрутке колесика мыши
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            
+            const delta = Math.sign(e.deltaY);
+            scale -= delta * scale * 0.1;
+            
+            // Ограничение масштаба
+            scale = Math.max(Math.min(canvas.width, canvas.height) / 150, Math.min(scale, Math.min(canvas.width, canvas.height) / 20));
+        });
+        
+        // Кнопки управления
+        document.getElementById('toggle-play').addEventListener('click', () => {
+            isPaused = !isPaused;
+            document.getElementById('toggle-play').textContent = isPaused ? 'Продолжить' : 'Пауза';
+        });
+        
+        document.getElementById('toggle-orbits').addEventListener('click', () => {
+            showOrbits = !showOrbits;
+            document.getElementById('toggle-orbits').textContent = showOrbits ? 'Скрыть орбиты' : 'Показать орбиты';
+        });
+        
+        document.getElementById('toggle-labels').addEventListener('click', () => {
+            showLabels = !showLabels;
+            document.getElementById('toggle-labels').textContent = showLabels ? 'Скрыть названия' : 'Показать названия';
+        });
+        
+        // Управление скоростью
+        const speedSlider = document.getElementById('speed-slider');
+        const speedValue = document.getElementById('speed-value');
+        
+        speedSlider.addEventListener('input', () => {
+            simulationSpeed = parseFloat(speedSlider.value);
+            speedValue.textContent = simulationSpeed.toFixed(1) + 'x';
+        });
+        
+        // Адаптивность при изменении размера окна
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            centerX = canvas.width / 2;
+            centerY = canvas.height / 2;
+            
+            scale = Math.min(canvas.width, canvas.height) / 70;
+            
+            // Повторная генерация звезд
+            window.stars = null;
+        });
+        
+        // Обработка сенсорных жестов
+        let touchStartX, touchStartY;
+        
+        canvas.addEventListener('touchstart', (e) => {
+            isDragging = true;
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        });
+        
+        canvas.addEventListener('touchmove', (e) => {
+            if (isDragging) {
+                const deltaX = e.touches[0].clientX - touchStartX;
+                const deltaY = e.touches[0].clientY - touchStartY;
+                
+                cameraRotationY += deltaX * 0.5;
+                cameraRotationX += deltaY * 0.5;
+                
+                // Ограничение вращения по вертикали
+                cameraRotationX = Math.max(-85, Math.min(85, cameraRotationX));
+                
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+            }
+            
+            // Предотвращаем прокрутку страницы
+            e.preventDefault();
+        });
+        
+        canvas.addEventListener('touchend', () => {
+            isDragging = false;
+        });
+    </script>
+</body>
+</html>
